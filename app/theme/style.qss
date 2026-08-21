@@ -16,9 +16,10 @@ QLabel#Muted { color: #71717A; }
 QFrame#Card { background: white; border: 1px solid #E4E4E7; border-radius: 14px; }
 QLineEdit, QTextEdit, QComboBox, QSpinBox, QDateEdit, QTimeEdit { background: white; border: 1px solid #D4D4D8; border-radius: 8px; padding: 7px; selection-background-color: #6366F1; }
 QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus { border-color: #6366F1; }
-QTableWidget { background: white; border: 1px solid #E4E4E7; border-radius: 10px; gridline-color: transparent; alternate-background-color: #FAFAFA; selection-background-color: #EEF2FF; selection-color: #18181B; }
+QTableWidget { background: white; border: 1px solid #E4E4E7; border-radius: 10px; gridline-color: transparent; alternate-background-color: #FAFAFA; selection-background-color: #EEF2FF; selection-color: #18181B; outline: 0; }
 QHeaderView::section { background: #F4F4F5; border: 0; border-bottom: 1px solid #E4E4E7; padding: 9px; font-weight: 600; }
 QTableWidget::item { padding: 7px; border-bottom: 1px solid #F4F4F5; }
 QTableWidget::item:selected { background: #EEF2FF; color: #18181B; }
+QTableWidget::item:focus { outline: none; }
 QScrollBar:vertical { width: 10px; background: transparent; }
 QScrollBar::handle:vertical { background: #D4D4D8; border-radius: 5px; min-height: 30px; }

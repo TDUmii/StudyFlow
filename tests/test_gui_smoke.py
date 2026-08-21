@@ -12,6 +12,8 @@ def test_table_selection_has_explicit_readable_colors():
     assert "selection-background-color: #EEF2FF" in stylesheet
     assert "selection-color: #18181B" in stylesheet
     assert "QTableWidget::item:selected" in stylesheet
+    assert "outline: 0" in stylesheet
+    assert "QTableWidget::item:focus { outline: none; }" in stylesheet
 
 
 def test_main_window_and_all_navigation(service):
