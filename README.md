@@ -15,13 +15,16 @@ StudyFlow is an offline personal study assistant for students and a capstone pro
 - Statistics cards and Matplotlib charts for study time, quiz scores, flashcard accuracy, subject totals, and streaks.
 - Smart Assistant recommendations and time-bounded study plans based on deterministic local rules.
 - Settings for profile, data counts, demo data, reload, reset, opening the data folder, and CSV export.
+- Runtime English/Vietnamese switching with the selected language saved locally.
 - Friendly empty states, validation messages, confirmations, logs, and safe handling for missing or malformed files.
 
 ## Screenshots
 
 The screenshot below is rendered from the real application with runtime-generated demo data. The default window is 1400 × 850 and supports a minimum size of 1100 × 700.
 
-![StudyFlow dashboard](assets/screenshots/dashboard.png)
+| English | Tiếng Việt |
+|---|---|
+| ![StudyFlow English dashboard](assets/screenshots/dashboard.png) | ![StudyFlow Vietnamese dashboard](assets/screenshots/dashboard-vi.png) |
 
 ## Tech Stack
 
@@ -40,6 +43,7 @@ StudyFlow/
 ├── README.md
 ├── app/
 │   ├── data/             # deterministic demo-data generator
+│   ├── i18n/             # language registry, translator, English and Vietnamese files
 │   ├── models/           # domain objects and serialization
 │   ├── repositories/     # model ↔ CSV dictionary conversion
 │   ├── services/         # validation, CRUD rules, statistics, recommendations
@@ -112,6 +116,31 @@ tasks.csv → DictReader → dictionaries → Task.from_dict() → service → U
 | `quiz_results.csv` | id, quiz_id, score, total, accuracy, duration_seconds, completed_at |
 | `settings.csv` | key, value |
 
+The active UI language is stored as the `language` key in `settings.csv` (`en` or `vi`). Existing installations without this key safely default to English and receive the key automatically.
+
+## Languages and Localization
+
+StudyFlow supports English and Vietnamese. Open **Settings → Language** and select `English` or `Tiếng Việt`; the window, navigation, pages, tables, dialogs, validation messages, charts, status labels, and Smart Assistant update immediately without restarting. The selection remains active after the application restarts.
+
+Localization is intentionally separated from UI and business logic:
+
+```text
+app/i18n/
+├── config.py       # DEFAULT_LANGUAGE and SUPPORTED_LANGUAGES registry
+├── translator.py   # active language state, tr() lookup, change signal
+├── en.py           # English translations
+└── vi.py           # Vietnamese translations
+```
+
+To add another language later:
+
+1. Copy `en.py` to a new language file such as `ja.py`.
+2. Translate every value while keeping the same keys.
+3. Import that dictionary in `app/i18n/config.py`.
+4. Add one new entry to the `SUPPORTED_LANGUAGES` variable.
+
+The translator falls back to English when an individual key is absent and falls back to `DEFAULT_LANGUAGE` when an unsupported language code is loaded. Automated tests also verify that the English and Vietnamese files contain the same keys.
+
 IDs use `max(existing valid IDs) + 1`; deleting a record never renumbers other records. Dates are stored as `YYYY-MM-DD` and displayed as `DD/MM/YYYY`.
 
 ## Smart Assistant Logic
@@ -161,7 +190,7 @@ Run all automated tests:
 pytest
 ```
 
-The suite covers missing-file creation, headers, append/read/update/delete, atomic rewrites, UTF-8, commas, quotes, multiline notes, malformed rows, task validation, subject relationships, quizzes, statistics, recommendation priorities, bounded study plans, demo data, application-window creation, navigation, and minimum-size layout smoke testing.
+The suite covers missing-file creation, headers, append/read/update/delete, atomic rewrites, UTF-8, commas, quotes, multiline notes, malformed rows, task validation, subject relationships, quizzes, statistics, recommendation priorities, bounded study plans, demo data, application-window creation, navigation, minimum-size layout smoke testing, translation-key parity, persistent language settings, live window switching, and localized Smart Assistant output.
 
 For a manual persistence exercise:
 

@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.services import AssistantService, StatisticsService
+from app.i18n import SUPPORTED_LANGUAGES, language_manager, tr
 from app.ui.dialogs import (
     FlashcardDialog,
     NoteDialog,
@@ -68,6 +69,28 @@ def selected_id(widget):
     return int(items[0].data(Qt.UserRole) or items[0].text()) if items else None
 
 
+def status_text(code: str) -> str:
+    return tr(f"status.{code.lower()}")
+
+
+def priority_text(code: str) -> str:
+    return tr(f"priority.{code.lower()}")
+
+
+def rating_text(code: str) -> str:
+    return tr(f"rating.{code.lower()}")
+
+
+def confirm(parent: QWidget, title: str, message: str) -> bool:
+    box = QMessageBox(parent)
+    box.setWindowTitle(title)
+    box.setText(message)
+    yes_button = box.addButton(tr("common.yes"), QMessageBox.AcceptRole)
+    box.addButton(tr("common.cancel"), QMessageBox.RejectRole)
+    box.exec()
+    return box.clickedButton() == yes_button
+
+
 class Page(QWidget):
     changed = Signal()
 
@@ -92,26 +115,26 @@ class Page(QWidget):
         try:
             return action()
         except (ValidationError, OSError) as exc:
-            QMessageBox.warning(self, "StudyFlow", str(exc))
+            QMessageBox.warning(self, tr("common.studyflow_message"), str(exc))
 
 
 class DashboardPage(Page):
     def __init__(self, service):
-        super().__init__(service, "Dashboard", "Your study day at a glance.")
+        super().__init__(service, tr("nav.dashboard"), tr("dashboard.subtitle"))
         grid = QGridLayout()
         self.cards = {}
         for index, (key, label) in enumerate(
             (
-                ("tasks_today", "Tasks Today"),
-                ("study_minutes", "Study Time This Week"),
-                ("upcoming", "Upcoming"),
-                ("streak", "Current Streak"),
+                ("tasks_today", tr("dashboard.tasks_today")),
+                ("study_minutes", tr("dashboard.study_week")),
+                ("upcoming", tr("dashboard.upcoming")),
+                ("streak", tr("dashboard.streak")),
             )
         ):
             self.cards[key] = card(label)
             grid.addWidget(self.cards[key], 0, index)
         self.root.addLayout(grid)
-        title = QLabel("Smart recommendation")
+        title = QLabel(tr("dashboard.recommendation"))
         title.setObjectName("SectionTitle")
         self.root.addWidget(title)
         self.recommendation = QLabel()
@@ -124,30 +147,41 @@ class DashboardPage(Page):
     def refresh(self):
         stats = StatisticsService(self.service.repos).summary()
         self.cards["tasks_today"].value_label.setText(str(stats["tasks_today"]))
-        self.cards["study_minutes"].value_label.setText(f'{stats["study_minutes"]} min')
+        self.cards["study_minutes"].value_label.setText(
+            f'{stats["study_minutes"]} {tr("common.minute_short")}'
+        )
         self.cards["upcoming"].value_label.setText(str(stats["upcoming"]))
-        self.cards["streak"].value_label.setText(f'{stats["streak"]} days')
+        self.cards["streak"].value_label.setText(
+            f'{stats["streak"]} {tr("common.days")}'
+        )
         self.recommendation.setText(AssistantService(self.service.repos).message())
 
 
 class SubjectsPage(Page):
     def __init__(self, service):
-        super().__init__(service, "Subjects", "Organize learning goals by subject.")
+        super().__init__(service, tr("nav.subjects"), tr("subjects.subtitle"))
         bar = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search subjects")
+        self.search.setPlaceholderText(tr("subjects.search"))
         self.search.textChanged.connect(self.refresh)
-        add = QPushButton("Add Subject")
+        add = QPushButton(tr("dialog.add_subject"))
         add.setObjectName("Primary")
         add.clicked.connect(self.add)
-        edit = QPushButton("Edit")
+        edit = QPushButton(tr("common.edit"))
         edit.clicked.connect(self.edit)
-        delete = QPushButton("Delete")
+        delete = QPushButton(tr("common.delete"))
         delete.setObjectName("Danger")
         delete.clicked.connect(self.delete)
         [bar.addWidget(x) for x in (self.search, add, edit, delete)]
         self.root.addLayout(bar)
-        self.table = table(["ID", "Name", "Target", "Description"])
+        self.table = table(
+            [
+                tr("table.id"),
+                tr("table.name"),
+                tr("table.target"),
+                tr("table.description"),
+            ]
+        )
         self.root.addWidget(self.table)
 
     def refresh(self):
@@ -179,14 +213,10 @@ class SubjectsPage(Page):
 
     def delete(self):
         item = self.service.repos.subjects.get(selected_id(self.table))
-        if (
-            item
-            and QMessageBox.question(
-                self,
-                "Delete subject",
-                f'Delete "{item.name}"?\n\nThis action cannot be undone.',
-            )
-            == QMessageBox.Yes
+        if item and confirm(
+            self,
+            tr("subjects.delete_title"),
+            tr("subjects.delete_message", name=item.name),
         ):
             self.guard(lambda: self.service.delete_subject(item.id))
             self.changed.emit()
@@ -194,23 +224,22 @@ class SubjectsPage(Page):
 
 class TasksPage(Page):
     def __init__(self, service):
-        super().__init__(
-            service, "Tasks", "Search, filter, prioritize and complete your work."
-        )
+        super().__init__(service, tr("nav.tasks"), tr("tasks.subtitle"))
         bar = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search tasks")
+        self.search.setPlaceholderText(tr("tasks.search"))
         self.filter = QComboBox()
-        self.filter.addItems(["ALL", "TODO", "IN_PROGRESS", "COMPLETED"])
+        for code in ("ALL", "TODO", "IN_PROGRESS", "COMPLETED"):
+            self.filter.addItem(status_text(code), code)
         self.search.textChanged.connect(self.refresh)
         self.filter.currentTextChanged.connect(self.refresh)
         buttons = []
         for text, callback, name in (
-            ("Add Task", self.add, "Primary"),
-            ("Edit", self.edit, ""),
-            ("Start", lambda: self.status("IN_PROGRESS"), ""),
-            ("Complete", lambda: self.status("COMPLETED"), ""),
-            ("Delete", self.delete, "Danger"),
+            (tr("dialog.add_task"), self.add, "Primary"),
+            (tr("common.edit"), self.edit, ""),
+            (tr("common.start"), lambda: self.status("IN_PROGRESS"), ""),
+            (tr("common.complete"), lambda: self.status("COMPLETED"), ""),
+            (tr("common.delete"), self.delete, "Danger"),
         ):
             b = QPushButton(text)
             b.setObjectName(name)
@@ -218,13 +247,22 @@ class TasksPage(Page):
             buttons.append(b)
         [bar.addWidget(x) for x in (self.search, self.filter, *buttons)]
         self.root.addLayout(bar)
-        self.table = table(["ID", "Title", "Subject", "Deadline", "Priority", "Status"])
+        self.table = table(
+            [
+                tr("table.id"),
+                tr("table.title"),
+                tr("table.subject"),
+                tr("table.deadline"),
+                tr("table.priority"),
+                tr("table.status"),
+            ]
+        )
         self.root.addWidget(self.table)
 
     def refresh(self):
         names = {s.id: s.name for s in self.service.repos.subjects.all()}
         term = self.search.text().casefold()
-        status = self.filter.currentText()
+        status = self.filter.currentData()
         items = [
             t
             for t in self.service.repos.tasks.all()
@@ -243,10 +281,10 @@ class TasksPage(Page):
                 (
                     t.id,
                     t.title,
-                    names.get(t.subject_id, "Missing subject"),
+                    names.get(t.subject_id, tr("common.missing_subject")),
                     display_date(t.deadline),
-                    t.priority,
-                    t.status,
+                    priority_text(t.priority),
+                    status_text(t.status),
                 )
                 for t in items
             ],
@@ -275,10 +313,10 @@ class TasksPage(Page):
 
     def delete(self):
         item = self.service.repos.tasks.get(selected_id(self.table))
-        if (
-            item
-            and QMessageBox.question(self, "Delete task", f'Delete "{item.title}"?')
-            == QMessageBox.Yes
+        if item and confirm(
+            self,
+            tr("tasks.delete_title"),
+            tr("tasks.delete_message", name=item.title),
         ):
             self.service.repos.tasks.delete(item.id)
             self.changed.emit()
@@ -288,24 +326,32 @@ class NotesPage(Page):
     def __init__(self, service):
         super().__init__(
             service,
-            "Notes",
-            "Plain-text notes safely stored with commas, quotes and new lines.",
+            tr("nav.notes"),
+            tr("notes.subtitle"),
         )
         bar = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search notes")
+        self.search.setPlaceholderText(tr("notes.search"))
         self.search.textChanged.connect(self.refresh)
-        add = QPushButton("Add Note")
+        add = QPushButton(tr("dialog.add_note"))
         add.setObjectName("Primary")
         add.clicked.connect(self.add)
-        edit = QPushButton("Edit")
+        edit = QPushButton(tr("common.edit"))
         edit.clicked.connect(self.edit)
-        delete = QPushButton("Delete")
+        delete = QPushButton(tr("common.delete"))
         delete.setObjectName("Danger")
         delete.clicked.connect(self.delete)
         [bar.addWidget(x) for x in (self.search, add, edit, delete)]
         self.root.addLayout(bar)
-        self.table = table(["ID", "Title", "Subject", "Updated", "Preview"])
+        self.table = table(
+            [
+                tr("table.id"),
+                tr("table.title"),
+                tr("table.subject"),
+                tr("table.updated"),
+                tr("table.preview"),
+            ]
+        )
         self.root.addWidget(self.table)
 
     def refresh(self):
@@ -322,7 +368,7 @@ class NotesPage(Page):
                 (
                     n.id,
                     n.title,
-                    names.get(n.subject_id, "Missing subject"),
+                    names.get(n.subject_id, tr("common.missing_subject")),
                     n.updated_at[:16].replace("T", " "),
                     n.content.replace("\n", " ")[:80],
                 )
@@ -347,10 +393,10 @@ class NotesPage(Page):
 
     def delete(self):
         item = self.service.repos.notes.get(selected_id(self.table))
-        if (
-            item
-            and QMessageBox.question(self, "Delete note", f'Delete "{item.title}"?')
-            == QMessageBox.Yes
+        if item and confirm(
+            self,
+            tr("notes.delete_title"),
+            tr("notes.delete_message", name=item.title),
         ):
             self.service.repos.notes.delete(item.id)
             self.changed.emit()
@@ -358,24 +404,30 @@ class NotesPage(Page):
 
 class PlannerPage(Page):
     def __init__(self, service):
-        super().__init__(
-            service, "Planner", "Schedule sessions and track actual study time."
-        )
+        super().__init__(service, tr("nav.planner"), tr("planner.subtitle"))
         bar = QHBoxLayout()
-        add = QPushButton("Plan Session")
+        add = QPushButton(tr("planner.plan_session"))
         add.setObjectName("Primary")
         add.clicked.connect(self.add)
-        complete = QPushButton("Complete")
+        complete = QPushButton(tr("common.complete"))
         complete.clicked.connect(self.complete)
-        start = QPushButton("Start Timer")
+        start = QPushButton(tr("planner.start_timer"))
         start.clicked.connect(self.start_timer)
         [bar.addWidget(x) for x in (add, complete, start)]
         bar.addStretch()
-        self.timer_label = QLabel("Timer ready")
+        self.timer_label = QLabel(tr("planner.timer_ready"))
         bar.addWidget(self.timer_label)
         self.root.addLayout(bar)
         self.table = table(
-            ["ID", "Date", "Start", "Subject", "Planned", "Actual", "Status"]
+            [
+                tr("table.id"),
+                tr("table.date"),
+                tr("table.start"),
+                tr("table.subject"),
+                tr("table.planned"),
+                tr("table.actual"),
+                tr("table.status"),
+            ]
         )
         self.root.addWidget(self.table)
         self.elapsed = 0
@@ -396,10 +448,10 @@ class PlannerPage(Page):
                     s.id,
                     display_date(s.date),
                     s.start_time,
-                    names.get(s.subject_id, "Missing subject"),
-                    f"{s.planned_minutes} min",
-                    f"{s.actual_minutes} min",
-                    s.status,
+                    names.get(s.subject_id, tr("common.missing_subject")),
+                    f"{s.planned_minutes} {tr('common.minute_short')}",
+                    f"{s.actual_minutes} {tr('common.minute_short')}",
+                    status_text(s.status),
                 )
                 for s in items
             ],
@@ -417,14 +469,11 @@ class PlannerPage(Page):
         item = self.service.repos.sessions.get(selected_id(self.table))
         if not item:
             return
-        minutes, ok = QSpinBox(), False
-        box = QMessageBox(self)
-        box.setWindowTitle("Complete session")
-        box.setText(
-            f"Mark this session complete with {item.planned_minutes} actual minutes?"
-        )
-        box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        if box.exec() == QMessageBox.Yes:
+        if confirm(
+            self,
+            tr("planner.complete_title"),
+            tr("planner.complete_message", minutes=item.planned_minutes),
+        ):
             self.guard(
                 lambda: self.service.complete_session(item.id, item.planned_minutes)
             )
@@ -434,40 +483,38 @@ class PlannerPage(Page):
         item = self.service.repos.sessions.get(selected_id(self.table))
         if not item:
             QMessageBox.information(
-                self, "Study timer", "Select a planned session first."
+                self, tr("planner.timer_title"), tr("planner.select_session")
             )
             return
         self.active = item
         self.elapsed = 0
         self.timer.start(1000)
-        self.timer_label.setText("00:00 — studying")
+        self.timer_label.setText(f"00:00 — {tr('planner.studying')}")
 
     def tick(self):
         self.elapsed += 1
         self.timer_label.setText(
-            f"{self.elapsed//60:02}:{self.elapsed%60:02} — studying"
+            f"{self.elapsed//60:02}:{self.elapsed%60:02} — {tr('planner.studying')}"
         )
         if self.elapsed >= self.active.planned_minutes * 60:
             self.timer.stop()
             self.service.complete_session(self.active.id, max(1, self.elapsed // 60))
             self.changed.emit()
             QMessageBox.information(
-                self, "Session complete", "Great work! Your study session was saved."
+                self, tr("planner.session_complete"), tr("planner.saved")
             )
 
 
 class FlashcardsPage(Page):
     def __init__(self, service):
-        super().__init__(
-            service, "Flashcards", "Review cards that need attention first."
-        )
+        super().__init__(service, tr("nav.flashcards"), tr("flashcards.subtitle"))
         bar = QHBoxLayout()
-        add = QPushButton("Add Flashcard")
+        add = QPushButton(tr("dialog.add_flashcard"))
         add.setObjectName("Primary")
         add.clicked.connect(self.add)
-        study = QPushButton("Study Selected")
+        study = QPushButton(tr("flashcards.study_selected"))
         study.clicked.connect(self.study)
-        delete = QPushButton("Delete")
+        delete = QPushButton(tr("common.delete"))
         delete.setObjectName("Danger")
         delete.clicked.connect(self.delete)
         [bar.addWidget(x) for x in (add, study, delete)]
@@ -475,13 +522,13 @@ class FlashcardsPage(Page):
         self.root.addLayout(bar)
         self.table = table(
             [
-                "ID",
-                "Subject",
-                "Question",
-                "Difficulty",
-                "Correct",
-                "Wrong",
-                "Last reviewed",
+                tr("table.id"),
+                tr("table.subject"),
+                tr("field.question"),
+                tr("flashcards.difficulty"),
+                tr("flashcards.correct"),
+                tr("flashcards.wrong"),
+                tr("flashcards.last_reviewed"),
             ]
         )
         self.root.addWidget(self.table)
@@ -497,9 +544,9 @@ class FlashcardsPage(Page):
             [
                 (
                     c.id,
-                    names.get(c.subject_id, "Missing subject"),
+                    names.get(c.subject_id, tr("common.missing_subject")),
                     c.question,
-                    c.difficulty,
+                    rating_text(c.difficulty),
                     c.correct_count,
                     c.wrong_count,
                     display_date(c.last_reviewed),
@@ -518,12 +565,14 @@ class FlashcardsPage(Page):
         card_item = self.service.repos.flashcards.get(selected_id(self.table))
         if not card_item:
             return
-        QMessageBox.information(self, "Flashcard", card_item.question)
+        QMessageBox.information(
+            self, tr("entity.flashcard").title(), card_item.question
+        )
         answer = QMessageBox(self)
-        answer.setWindowTitle("Answer")
+        answer.setWindowTitle(tr("field.answer"))
         answer.setText(card_item.answer)
         buttons = {
-            rating: answer.addButton(rating.title(), QMessageBox.ActionRole)
+            rating: answer.addButton(rating_text(rating), QMessageBox.ActionRole)
             for rating in ("AGAIN", "HARD", "GOOD", "EASY")
         }
         answer.exec()
@@ -541,10 +590,10 @@ class FlashcardsPage(Page):
 
     def delete(self):
         item = self.service.repos.flashcards.get(selected_id(self.table))
-        if (
-            item
-            and QMessageBox.question(self, "Delete flashcard", "Delete this flashcard?")
-            == QMessageBox.Yes
+        if item and confirm(
+            self,
+            tr("flashcards.delete_title"),
+            tr("flashcards.delete_message"),
         ):
             self.service.repos.flashcards.delete(item.id)
             self.changed.emit()
@@ -552,22 +601,28 @@ class FlashcardsPage(Page):
 
 class QuizPage(Page):
     def __init__(self, service):
-        super().__init__(
-            service, "Quiz", "Create quizzes, answer them and review results."
-        )
+        super().__init__(service, tr("nav.quiz"), tr("quiz.subtitle"))
         bar = QHBoxLayout()
-        add = QPushButton("Create Quiz")
+        add = QPushButton(tr("dialog.create_quiz"))
         add.setObjectName("Primary")
         add.clicked.connect(self.add)
-        take = QPushButton("Take Quiz")
+        take = QPushButton(tr("quiz.take"))
         take.clicked.connect(self.take)
-        delete = QPushButton("Delete")
+        delete = QPushButton(tr("common.delete"))
         delete.setObjectName("Danger")
         delete.clicked.connect(self.delete)
         [bar.addWidget(x) for x in (add, take, delete)]
         bar.addStretch()
         self.root.addLayout(bar)
-        self.table = table(["ID", "Title", "Subject", "Questions", "Best result"])
+        self.table = table(
+            [
+                tr("table.id"),
+                tr("table.title"),
+                tr("table.subject"),
+                tr("quiz.questions"),
+                tr("quiz.best_result"),
+            ]
+        )
         self.root.addWidget(self.table)
 
     def refresh(self):
@@ -582,9 +637,9 @@ class QuizPage(Page):
                 (
                     q.id,
                     q.title,
-                    names.get(q.subject_id, "Missing subject"),
+                    names.get(q.subject_id, tr("common.missing_subject")),
                     count,
-                    f"{max(scores):.0f}%" if scores else "Not taken",
+                    f"{max(scores):.0f}%" if scores else tr("quiz.not_taken"),
                 )
             )
         fill_table(self.table, rows)
@@ -625,26 +680,34 @@ class QuizPage(Page):
                 "",
             )
             answers[q.id] = chosen
+            result_label = (
+                tr("quiz.correct") if chosen == q.correct_option else tr("quiz.wrong")
+            )
             review.append(
-                f'{"Correct" if chosen==q.correct_option else "Wrong"}: {q.question_text}\nAnswer: {q.correct_option}. {getattr(q,"option_"+q.correct_option.lower())}\n{q.explanation}'
+                f'{result_label}: {q.question_text}\n{tr("quiz.answer")}: '
+                f'{q.correct_option}. {getattr(q,"option_"+q.correct_option.lower())}\n'
+                f"{q.explanation}"
             )
         result = self.service.submit_quiz(quiz.id, answers)
         QMessageBox.information(
             self,
-            "Quiz result",
-            f"Score: {result.score} / {result.total}\nAccuracy: {result.accuracy:.0f}%\n\n"
-            + "\n\n".join(review),
+            tr("quiz.result"),
+            tr(
+                "quiz.result_text",
+                score=result.score,
+                total=result.total,
+                accuracy=f"{result.accuracy:.0f}",
+                review="\n\n".join(review),
+            ),
         )
         self.changed.emit()
 
     def delete(self):
         quiz = self.service.repos.quizzes.get(selected_id(self.table))
-        if (
-            quiz
-            and QMessageBox.question(
-                self, "Delete quiz", f'Delete "{quiz.title}" and its results?'
-            )
-            == QMessageBox.Yes
+        if quiz and confirm(
+            self,
+            tr("quiz.delete_title"),
+            tr("quiz.delete_message", name=quiz.title),
         ):
             self.service.delete_quiz(quiz.id)
             self.changed.emit()
@@ -652,19 +715,17 @@ class QuizPage(Page):
 
 class StatisticsPage(Page):
     def __init__(self, service):
-        super().__init__(
-            service, "Statistics", "Locally calculated progress from your CSV data."
-        )
+        super().__init__(service, tr("nav.statistics"), tr("statistics.subtitle"))
         self.grid = QGridLayout()
         self.items = {}
         for i, (key, label) in enumerate(
             (
-                ("study_minutes", "Study time this week"),
-                ("average_quiz", "Average quiz"),
-                ("flashcard_accuracy", "Flashcard accuracy"),
-                ("streak", "Study streak"),
-                ("most_studied", "Most studied"),
-                ("completed_tasks", "Tasks completed"),
+                ("study_minutes", tr("statistics.study_week")),
+                ("average_quiz", tr("statistics.average_quiz")),
+                ("flashcard_accuracy", tr("statistics.flashcard_accuracy")),
+                ("streak", tr("statistics.streak")),
+                ("most_studied", tr("statistics.most_studied")),
+                ("completed_tasks", tr("statistics.tasks_completed")),
             )
         ):
             self.items[key] = card(label)
@@ -675,12 +736,14 @@ class StatisticsPage(Page):
 
     def refresh(self):
         s = StatisticsService(self.service.repos).summary()
-        self.items["study_minutes"].value_label.setText(f'{s["study_minutes"]} min')
+        self.items["study_minutes"].value_label.setText(
+            f'{s["study_minutes"]} {tr("common.minute_short")}'
+        )
         self.items["average_quiz"].value_label.setText(f'{s["average_quiz"]}%')
         self.items["flashcard_accuracy"].value_label.setText(
             f'{s["flashcard_accuracy"]}%'
         )
-        self.items["streak"].value_label.setText(f'{s["streak"]} days')
+        self.items["streak"].value_label.setText(f'{s["streak"]} {tr("common.days")}')
         self.items["most_studied"].value_label.setText(str(s["most_studied"]))
         self.items["completed_tasks"].value_label.setText(
             f'{s["completed_tasks"]} / {s["weekly_tasks"]}'
@@ -692,19 +755,19 @@ class AssistantPage(Page):
     def __init__(self, service):
         super().__init__(
             service,
-            "Smart Assistant",
-            "Personalized recommendations based on your study data.",
+            tr("nav.assistant"),
+            tr("assistant.subtitle"),
         )
         self.message = QTextEdit()
         self.message.setReadOnly(True)
         self.root.addWidget(self.message)
         planbar = QHBoxLayout()
-        planbar.addWidget(QLabel("Available time"))
+        planbar.addWidget(QLabel(tr("assistant.available_time")))
         self.minutes = QSpinBox()
         self.minutes.setRange(10, 240)
         self.minutes.setValue(60)
-        self.minutes.setSuffix(" minutes")
-        button = QPushButton("Build Study Plan")
+        self.minutes.setSuffix(f" {tr('common.minutes')}")
+        button = QPushButton(tr("assistant.build_plan"))
         button.setObjectName("Primary")
         button.clicked.connect(self.build_plan)
         planbar.addWidget(self.minutes)
@@ -722,44 +785,57 @@ class AssistantPage(Page):
         plan = AssistantService(self.service.repos).study_plan(self.minutes.value())
         self.plan.setPlainText(
             "\n".join(
-                f'{index}. {item["subject"]} — {item["minutes"]} minutes (priority {item["score"]})'
+                tr(
+                    "assistant.plan_line",
+                    index=index,
+                    subject=item["subject"],
+                    minutes=item["minutes"],
+                    score=item["score"],
+                )
                 for index, item in enumerate(plan, 1)
             )
-            or "Add study data or increase available time to build a plan."
+            or tr("assistant.plan_empty")
         )
 
 
 class SettingsPage(Page):
     def __init__(self, service):
-        super().__init__(
-            service, "Settings", "Profile, local data files and application tools."
-        )
+        super().__init__(service, tr("nav.settings"), tr("settings.subtitle"))
         form = QFormLayout()
         self.name = QLineEdit()
         self.duration = QSpinBox()
         self.duration.setRange(5, 240)
-        self.duration.setSuffix(" minutes")
-        save = QPushButton("Save Settings")
+        self.duration.setSuffix(f" {tr('common.minutes')}")
+        self.language = QComboBox()
+        for code, language in SUPPORTED_LANGUAGES.items():
+            self.language.addItem(language["native_name"], code)
+        self.language.currentIndexChanged.connect(self.change_language)
+        save = QPushButton(tr("settings.save"))
         save.setObjectName("Primary")
         save.clicked.connect(self.save)
-        form.addRow("Student name", self.name)
-        form.addRow("Default study duration", self.duration)
-        form.addRow("Theme", QLabel("Light"))
+        form.addRow(tr("label.student_name"), self.name)
+        form.addRow(tr("settings.default_duration"), self.duration)
+        form.addRow(tr("language.label"), self.language)
+        form.addRow(tr("settings.theme"), QLabel(tr("settings.light")))
         form.addRow("", save)
         self.root.addLayout(form)
         self.files = QTextEdit()
         self.files.setReadOnly(True)
         self.files.setMaximumHeight(190)
-        self.root.addWidget(QLabel("Data Files"))
+        self.root.addWidget(QLabel(tr("settings.data_files")))
         self.root.addWidget(self.files)
         bar = QHBoxLayout()
         for text, callback, name in (
-            ("Open Data Folder", self.open_folder, ""),
-            ("Load Demo Data", self.demo, ""),
-            ("Reload Data", lambda: self.changed.emit(), ""),
-            ("Export Tasks", lambda: self.export("Tasks"), ""),
-            ("Export Study History", lambda: self.export("Study History"), ""),
-            ("Reset Application Data", self.reset, "Danger"),
+            (tr("settings.open_folder"), self.open_folder, ""),
+            (tr("settings.load_demo"), self.demo, ""),
+            (tr("settings.reload"), lambda: self.changed.emit(), ""),
+            (tr("settings.export_tasks"), lambda: self.export("tasks"), ""),
+            (
+                tr("settings.export_history"),
+                lambda: self.export("study_sessions"),
+                "",
+            ),
+            (tr("settings.reset"), self.reset, "Danger"),
         ):
             button = QPushButton(text)
             button.setObjectName(name)
@@ -767,9 +843,7 @@ class SettingsPage(Page):
             bar.addWidget(button)
         self.root.addLayout(bar)
         self.root.addStretch()
-        version = QLabel(
-            "StudyFlow — Version 0.1.0\nOffline CSV study assistant. No generative AI or external API."
-        )
+        version = QLabel(tr("settings.about"))
         version.setObjectName("Muted")
         self.root.addWidget(version)
 
@@ -778,6 +852,12 @@ class SettingsPage(Page):
         self.duration.setValue(
             int(self.service.repos.settings.get("default_study_duration", "30"))
         )
+        language_code = self.service.repos.settings.get(
+            "language", language_manager.current_language
+        )
+        self.language.blockSignals(True)
+        self.language.setCurrentIndex(max(0, self.language.findData(language_code)))
+        self.language.blockSignals(False)
         lines = []
         for label, repo in (
             ("subjects.csv", self.service.repos.subjects),
@@ -788,35 +868,41 @@ class SettingsPage(Page):
             ("quizzes.csv", self.service.repos.quizzes),
             ("quiz_results.csv", self.service.repos.results),
         ):
-            lines.append(f"{label:<24} {len(repo.storage.read_all())} records")
+            lines.append(
+                f"{label:<24} "
+                f"{tr('settings.records', count=len(repo.storage.read_all()))}"
+            )
         self.files.setPlainText("\n".join(lines))
 
     def save(self):
         self.guard(
-            lambda: self.service.setup_profile(self.name.text(), self.duration.value())
+            lambda: self.service.setup_profile(
+                self.name.text(), self.duration.value(), self.language.currentData()
+            )
         )
         self.changed.emit()
 
+    def change_language(self):
+        language_code = self.language.currentData()
+        if not language_code:
+            return
+        self.service.repos.settings.set("language", language_code)
+        language_manager.set_language(language_code)
+
     def demo(self):
-        if (
-            QMessageBox.question(
-                self,
-                "Load demo data",
-                "Replace current records with complete demo data?",
-            )
-            == QMessageBox.Yes
+        if confirm(
+            self,
+            tr("settings.demo_title"),
+            tr("settings.demo_message"),
         ):
             self.service.load_demo()
             self.changed.emit()
 
     def reset(self):
-        if (
-            QMessageBox.question(
-                self,
-                "Reset application data",
-                "This will permanently delete your local data.\n\nContinue?",
-            )
-            == QMessageBox.Yes
+        if confirm(
+            self,
+            tr("settings.reset_title"),
+            tr("settings.reset_message"),
         ):
             self.service.reset()
             self.changed.emit()
@@ -827,4 +913,8 @@ class SettingsPage(Page):
     def export(self, name):
         path = self.guard(lambda: self.service.export(name))
         if path:
-            QMessageBox.information(self, "Export complete", f"Saved to:\n{path}")
+            QMessageBox.information(
+                self,
+                tr("settings.export_complete"),
+                tr("settings.saved_to", path=path),
+            )

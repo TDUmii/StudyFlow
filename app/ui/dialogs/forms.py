@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from app.i18n import SUPPORTED_LANGUAGES, language_manager, tr
 from app.utils.validators import ValidationError
 
 
@@ -28,6 +29,8 @@ class FormDialog(QDialog):
         self.form.setSpacing(12)
         self.layout.addLayout(self.form)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        self.buttons.button(QDialogButtonBox.Save).setText(tr("common.save"))
+        self.buttons.button(QDialogButtonBox.Cancel).setText(tr("common.cancel"))
         self.buttons.accepted.connect(self.validate_and_accept)
         self.buttons.rejected.connect(self.reject)
         self.layout.addWidget(self.buttons)
@@ -36,7 +39,7 @@ class FormDialog(QDialog):
         try:
             self.validate()
         except ValidationError as exc:
-            QMessageBox.warning(self, "Check your information", str(exc))
+            QMessageBox.warning(self, tr("dialog.check_information"), str(exc))
             return
         self.accept()
 
@@ -56,27 +59,48 @@ def subject_combo(subjects, selected=None):
 
 class OnboardingDialog(FormDialog):
     def __init__(self, parent=None):
-        super().__init__("Welcome to StudyFlow", parent)
+        super().__init__(tr("onboarding.title"), parent)
         self.name = QLineEdit()
-        self.name.setPlaceholderText("Your name")
+        self.name.setPlaceholderText(tr("onboarding.name_placeholder"))
         self.duration = QSpinBox()
         self.duration.setRange(5, 240)
         self.duration.setValue(30)
-        self.duration.setSuffix(" minutes")
-        self.form.addRow("Your name", self.name)
-        self.form.addRow("Default study session", self.duration)
+        self.duration.setSuffix(f" {tr('common.minutes')}")
+        self.language = QComboBox()
+        for code, language in SUPPORTED_LANGUAGES.items():
+            self.language.addItem(language["native_name"], code)
+        self.form.addRow(tr("onboarding.your_name"), self.name)
+        self.form.addRow(tr("onboarding.default_session"), self.duration)
+        self.form.addRow("Language / Ngôn ngữ", self.language)
+        self.language.currentIndexChanged.connect(self.change_language)
+
+    def change_language(self):
+        language_manager.set_language(self.language.currentData(), emit=False)
+        self.setWindowTitle(tr("onboarding.title"))
+        self.name.setPlaceholderText(tr("onboarding.name_placeholder"))
+        self.duration.setSuffix(f" {tr('common.minutes')}")
+        self.form.labelForField(self.name).setText(tr("onboarding.your_name"))
+        self.form.labelForField(self.duration).setText(tr("onboarding.default_session"))
+        self.buttons.button(QDialogButtonBox.Save).setText(tr("common.save"))
+        self.buttons.button(QDialogButtonBox.Cancel).setText(tr("common.cancel"))
 
     def validate(self):
         if not self.name.text().strip():
-            raise ValidationError("Your name is required.")
+            raise ValidationError(tr("onboarding.name_required"))
 
     def values(self):
-        return self.name.text().strip(), self.duration.value()
+        return (
+            self.name.text().strip(),
+            self.duration.value(),
+            self.language.currentData(),
+        )
 
 
 class SubjectDialog(FormDialog):
     def __init__(self, subject=None, parent=None):
-        super().__init__("Edit Subject" if subject else "Add Subject", parent)
+        super().__init__(
+            tr("dialog.edit_subject") if subject else tr("dialog.add_subject"), parent
+        )
         self.name = QLineEdit(subject.name if subject else "")
         self.color = QLineEdit(subject.color if subject else "#6366F1")
         self.description = QTextEdit(subject.description if subject else "")
@@ -85,14 +109,16 @@ class SubjectDialog(FormDialog):
         self.target.setRange(1, 100)
         self.target.setValue(subject.target_score if subject else 80)
         self.target.setSuffix("%")
-        self.form.addRow("Name", self.name)
-        self.form.addRow("Color (HEX)", self.color)
-        self.form.addRow("Description", self.description)
-        self.form.addRow("Target score", self.target)
+        self.form.addRow(tr("field.name"), self.name)
+        self.form.addRow(tr("field.color_hex"), self.color)
+        self.form.addRow(tr("field.description"), self.description)
+        self.form.addRow(tr("field.target_score"), self.target)
 
     def validate(self):
         if not self.name.text().strip():
-            raise ValidationError("Subject name is required.")
+            raise ValidationError(
+                tr("validation.required", label=tr("label.subject_name"))
+            )
 
     def values(self):
         return {
@@ -105,7 +131,9 @@ class SubjectDialog(FormDialog):
 
 class TaskDialog(FormDialog):
     def __init__(self, subjects, task=None, parent=None):
-        super().__init__("Edit Task" if task else "Add Task", parent)
+        super().__init__(
+            tr("dialog.edit_task") if task else tr("dialog.add_task"), parent
+        )
         self.title = QLineEdit(task.title if task else "")
         self.subject = subject_combo(subjects, task.subject_id if task else None)
         self.deadline = QDateEdit()
@@ -117,36 +145,39 @@ class TaskDialog(FormDialog):
             else QDate.currentDate()
         )
         self.priority = QComboBox()
-        self.priority.addItems(["LOW", "MEDIUM", "HIGH"])
-        self.priority.setCurrentText(task.priority if task else "MEDIUM")
+        for code in ("LOW", "MEDIUM", "HIGH"):
+            self.priority.addItem(tr(f"priority.{code.lower()}"), code)
+        self.priority.setCurrentIndex(
+            self.priority.findData(task.priority if task else "MEDIUM")
+        )
         self.minutes = QSpinBox()
         self.minutes.setRange(1, 600)
         self.minutes.setValue(task.estimated_minutes if task else 30)
-        self.minutes.setSuffix(" minutes")
+        self.minutes.setSuffix(f" {tr('common.minutes')}")
         self.description = QTextEdit(task.description if task else "")
         self.description.setMaximumHeight(80)
         for label, widget in (
-            ("Title", self.title),
-            ("Subject", self.subject),
-            ("Deadline", self.deadline),
-            ("Priority", self.priority),
-            ("Estimated time", self.minutes),
-            ("Description", self.description),
+            (tr("field.title"), self.title),
+            (tr("field.subject"), self.subject),
+            (tr("field.deadline"), self.deadline),
+            (tr("field.priority"), self.priority),
+            (tr("field.estimated_time"), self.minutes),
+            (tr("field.description"), self.description),
         ):
             self.form.addRow(label, widget)
 
     def validate(self):
         if not self.title.text().strip():
-            raise ValidationError("Title is required.")
+            raise ValidationError(tr("validation.required", label=tr("field.title")))
         if self.subject.currentData() is None:
-            raise ValidationError("Create a subject first.")
+            raise ValidationError(tr("validation.create_subject_first"))
 
     def values(self):
         return {
             "title": self.title.text(),
             "subject_id": self.subject.currentData(),
             "deadline": self.deadline.date().toString("yyyy-MM-dd"),
-            "priority": self.priority.currentText(),
+            "priority": self.priority.currentData(),
             "minutes": self.minutes.value(),
             "description": self.description.toPlainText(),
         }
@@ -154,20 +185,22 @@ class TaskDialog(FormDialog):
 
 class NoteDialog(FormDialog):
     def __init__(self, subjects, note=None, parent=None):
-        super().__init__("Edit Note" if note else "Add Note", parent)
+        super().__init__(
+            tr("dialog.edit_note") if note else tr("dialog.add_note"), parent
+        )
         self.resize(520, 400)
         self.title = QLineEdit(note.title if note else "")
         self.subject = subject_combo(subjects, note.subject_id if note else None)
         self.content = QTextEdit(note.content if note else "")
-        self.form.addRow("Title", self.title)
-        self.form.addRow("Subject", self.subject)
-        self.form.addRow("Content", self.content)
+        self.form.addRow(tr("field.title"), self.title)
+        self.form.addRow(tr("field.subject"), self.subject)
+        self.form.addRow(tr("field.content"), self.content)
 
     def validate(self):
         if not self.title.text().strip() or not self.content.toPlainText().strip():
-            raise ValidationError("Title and content are required.")
+            raise ValidationError(tr("validation.title_content"))
         if self.subject.currentData() is None:
-            raise ValidationError("Create a subject first.")
+            raise ValidationError(tr("validation.create_subject_first"))
 
     def values(self):
         return self.title.text(), self.subject.currentData(), self.content.toPlainText()
@@ -175,15 +208,18 @@ class NoteDialog(FormDialog):
 
 class FlashcardDialog(FormDialog):
     def __init__(self, subjects, card=None, parent=None):
-        super().__init__("Edit Flashcard" if card else "Add Flashcard", parent)
+        super().__init__(
+            tr("dialog.edit_flashcard") if card else tr("dialog.add_flashcard"),
+            parent,
+        )
         self.subject = subject_combo(subjects, card.subject_id if card else None)
         self.question = QTextEdit(card.question if card else "")
         self.answer = QTextEdit(card.answer if card else "")
         self.question.setMaximumHeight(100)
         self.answer.setMaximumHeight(100)
-        self.form.addRow("Subject", self.subject)
-        self.form.addRow("Question", self.question)
-        self.form.addRow("Answer", self.answer)
+        self.form.addRow(tr("field.subject"), self.subject)
+        self.form.addRow(tr("field.question"), self.question)
+        self.form.addRow(tr("field.answer"), self.answer)
 
     def validate(self):
         if (
@@ -191,7 +227,7 @@ class FlashcardDialog(FormDialog):
             or not self.question.toPlainText().strip()
             or not self.answer.toPlainText().strip()
         ):
-            raise ValidationError("Subject, question and answer are required.")
+            raise ValidationError(tr("validation.flashcard_fields"))
 
     def values(self):
         return (
@@ -203,10 +239,10 @@ class FlashcardDialog(FormDialog):
 
 class SessionDialog(FormDialog):
     def __init__(self, subjects, tasks, parent=None):
-        super().__init__("Plan Study Session", parent)
+        super().__init__(tr("dialog.plan_session"), parent)
         self.subject = subject_combo(subjects)
         self.task = QComboBox()
-        self.task.addItem("No linked task", "")
+        self.task.addItem(tr("planner.no_linked_task"), "")
         for task in tasks:
             self.task.addItem(task.title, str(task.id))
         self.date = QDateEdit(QDate.currentDate())
@@ -217,21 +253,21 @@ class SessionDialog(FormDialog):
         self.minutes = QSpinBox()
         self.minutes.setRange(1, 600)
         self.minutes.setValue(30)
-        self.minutes.setSuffix(" minutes")
+        self.minutes.setSuffix(f" {tr('common.minutes')}")
         self.note = QLineEdit()
         for label, w in (
-            ("Subject", self.subject),
-            ("Task", self.task),
-            ("Date", self.date),
-            ("Start time", self.time),
-            ("Planned time", self.minutes),
-            ("Note", self.note),
+            (tr("field.subject"), self.subject),
+            (tr("field.task"), self.task),
+            (tr("field.date"), self.date),
+            (tr("field.start_time"), self.time),
+            (tr("field.planned_time"), self.minutes),
+            (tr("field.note"), self.note),
         ):
             self.form.addRow(label, w)
 
     def validate(self):
         if self.subject.currentData() is None:
-            raise ValidationError("Create a subject first.")
+            raise ValidationError(tr("validation.create_subject_first"))
 
     def values(self):
         return (
@@ -248,7 +284,7 @@ class QuizDialog(FormDialog):
     """Creates a useful one-question quiz; more questions can be added as separate quizzes."""
 
     def __init__(self, subjects, parent=None):
-        super().__init__("Create Quiz", parent)
+        super().__init__(tr("dialog.create_quiz"), parent)
         self.resize(520, 560)
         self.subject = subject_combo(subjects)
         self.title = QLineEdit()
@@ -258,24 +294,24 @@ class QuizDialog(FormDialog):
         self.correct = QComboBox()
         self.correct.addItems(list("ABCD"))
         self.explanation = QLineEdit()
-        self.form.addRow("Subject", self.subject)
-        self.form.addRow("Quiz title", self.title)
-        self.form.addRow("Description", self.description)
-        self.form.addRow("Question", self.question)
+        self.form.addRow(tr("field.subject"), self.subject)
+        self.form.addRow(tr("field.quiz_title"), self.title)
+        self.form.addRow(tr("field.description"), self.description)
+        self.form.addRow(tr("field.question"), self.question)
         for letter, widget in zip("ABCD", self.options):
-            self.form.addRow(f"Option {letter}", widget)
-        self.form.addRow("Correct option", self.correct)
-        self.form.addRow("Explanation", self.explanation)
+            self.form.addRow(tr("field.option", letter=letter), widget)
+        self.form.addRow(tr("field.correct_option"), self.correct)
+        self.form.addRow(tr("field.explanation"), self.explanation)
 
     def validate(self):
         if self.subject.currentData() is None:
-            raise ValidationError("Create a subject first.")
+            raise ValidationError(tr("validation.create_subject_first"))
         if (
             not self.title.text().strip()
             or not self.question.text().strip()
             or any(not x.text().strip() for x in self.options)
         ):
-            raise ValidationError("Title, question and all four options are required.")
+            raise ValidationError(tr("validation.quiz_fields"))
 
     def values(self):
         q = {

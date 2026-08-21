@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from app.repositories import RepositoryBundle
+from app.i18n import tr
 
 
 class StatisticsService:
@@ -53,7 +54,8 @@ class StatisticsService:
             "streak": self.streak(by_day),
             "most_studied": subjects.get(most_id, "—"),
             "by_subject": {
-                subjects.get(key, "Unknown"): value for key, value in by_subject.items()
+                subjects.get(key, tr("common.unknown")): value
+                for key, value in by_subject.items()
             },
             "by_day": dict(by_day),
             "flashcard_accuracy": self.flashcard_accuracy(),

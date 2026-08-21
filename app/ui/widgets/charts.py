@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
+from app.i18n import tr
 
 
 class StudyCharts(FigureCanvasQTAgg):
@@ -18,10 +19,10 @@ class StudyCharts(FigureCanvasQTAgg):
             values = [by_subject[name] for name in names]
             left.bar(names, values, color="#6366F1")
             left.tick_params(axis="x", rotation=25, labelsize=8)
-            left.set_title("Study time by subject")
-            left.set_ylabel("Minutes")
+            left.set_title(tr("chart.study_subject"))
+            left.set_ylabel(tr("chart.minutes"))
         else:
-            left.text(0.5, 0.5, "No subject data", ha="center", va="center")
+            left.text(0.5, 0.5, tr("chart.no_subject"), ha="center", va="center")
             left.set_axis_off()
         if by_day:
             days = sorted(by_day)[-7:]
@@ -32,11 +33,11 @@ class StudyCharts(FigureCanvasQTAgg):
                 color="#22C55E",
                 linewidth=2,
             )
-            right.set_title("Study activity")
-            right.set_ylabel("Minutes")
+            right.set_title(tr("chart.study_activity"))
+            right.set_ylabel(tr("chart.minutes"))
             right.tick_params(axis="x", rotation=25, labelsize=8)
         else:
-            right.text(0.5, 0.5, "No study history", ha="center", va="center")
+            right.text(0.5, 0.5, tr("chart.no_history"), ha="center", va="center")
             right.set_axis_off()
         for axis in (left, right):
             axis.spines[["top", "right"]].set_visible(False)

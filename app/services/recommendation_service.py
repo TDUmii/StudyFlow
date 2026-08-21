@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from app.repositories import RepositoryBundle
+from app.i18n import tr
 
 
 class RecommendationService:
@@ -31,11 +32,10 @@ class RecommendationService:
                 points += 12
             scores[task.subject_id] = scores.get(task.subject_id, 0) + points
             if days < 0:
-                reasons[task.subject_id].append(f'Overdue task: "{task.title}"')
+                reasons[task.subject_id].append(tr("reason.overdue", title=task.title))
             elif days <= 1:
-                reasons[task.subject_id].append(
-                    f'"{task.title}" is due {"today" if days == 0 else "tomorrow"}'
-                )
+                reason_key = "reason.due_today" if days == 0 else "reason.due_tomorrow"
+                reasons[task.subject_id].append(tr(reason_key, title=task.title))
         quiz_by_subject: dict[int, list[float]] = defaultdict(list)
         quizzes = {q.id: q for q in self.repos.quizzes.all()}
         for result in self.repos.results.all():
@@ -46,12 +46,14 @@ class RecommendationService:
             average = sum(values) / len(values)
             if average < 70:
                 scores[subject_id] += int((70 - average) * 0.7) + 10
-                reasons[subject_id].append(f"Quiz average is {average:.0f}%")
+                reasons[subject_id].append(
+                    tr("reason.quiz_average", average=f"{average:.0f}")
+                )
         for card in self.repos.flashcards.all():
             attempts = card.correct_count + card.wrong_count
             if attempts and card.correct_count / attempts < 0.7:
                 scores[card.subject_id] += 8
-                reasons[card.subject_id].append("Flashcards need more review")
+                reasons[card.subject_id].append(tr("reason.flashcards"))
             if (
                 not card.last_reviewed
                 or card.last_reviewed < (today - timedelta(days=7)).isoformat()
@@ -66,7 +68,7 @@ class RecommendationService:
             if minutes[subject.id] < 30:
                 scores[subject.id] += 10
                 reasons[subject.id].append(
-                    f"Only {minutes[subject.id]} minutes studied in the last 7 days"
+                    tr("reason.low_activity", minutes=minutes[subject.id])
                 )
         return sorted(
             (

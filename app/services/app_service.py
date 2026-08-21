@@ -6,6 +6,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from app.data.seed import load_demo_data
+from app.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, tr
 from app.models import (
     Flashcard,
     Note,
@@ -30,13 +31,22 @@ class AppService:
         self.export_dir = Path(export_dir or Path(data_dir).parent / "exports")
         self.export_dir.mkdir(parents=True, exist_ok=True)
 
-    def setup_profile(self, name: str, duration: int = 30) -> None:
-        self.repos.profile.save(required(name, "Student name"), now_iso())
+    def setup_profile(
+        self, name: str, duration: int = 30, language: str | None = None
+    ) -> None:
+        self.repos.profile.save(required(name, tr("label.student_name")), now_iso())
         self.repos.settings.set(
-            "default_study_duration", integer_between(duration, 5, 240, "Duration")
+            "default_study_duration",
+            integer_between(duration, 5, 240, tr("label.duration")),
         )
         self.repos.settings.set("theme", "light")
         self.repos.settings.set("minimum_study_day", "10")
+        selected_language = language or self.repos.settings.get(
+            "language", DEFAULT_LANGUAGE
+        )
+        if selected_language not in SUPPORTED_LANGUAGES:
+            selected_language = DEFAULT_LANGUAGE
+        self.repos.settings.set("language", selected_language)
 
     def create_subject(
         self,
@@ -45,31 +55,36 @@ class AppService:
         description: str = "",
         target_score: int = 80,
     ) -> Subject:
-        name = required(name, "Subject name")
+        name = required(name, tr("label.subject_name"))
         if any(
             item.name.casefold() == name.casefold()
             for item in self.repos.subjects.all()
         ):
-            raise ValidationError("A subject with this name already exists.")
+            raise ValidationError(tr("validation.subject_exists"))
         subject = Subject(
             self.repos.subjects.create_id(),
             name,
             color,
             description.strip(),
-            integer_between(target_score, 1, 100, "Target score"),
+            integer_between(target_score, 1, 100, tr("label.target_score")),
             now_iso(),
         )
         return self.repos.subjects.add(subject)
 
     def update_subject(self, subject_id: int, **values) -> Subject:
-        subject = self._require(self.repos.subjects.get(subject_id), "Subject")
+        subject = self._require(
+            self.repos.subjects.get(subject_id), tr("entity.subject")
+        )
         updated = replace(
             subject,
-            name=required(values.get("name", subject.name), "Subject name"),
+            name=required(values.get("name", subject.name), tr("label.subject_name")),
             color=values.get("color", subject.color),
             description=values.get("description", subject.description).strip(),
             target_score=integer_between(
-                values.get("target_score", subject.target_score), 1, 100, "Target score"
+                values.get("target_score", subject.target_score),
+                1,
+                100,
+                tr("label.target_score"),
             ),
         )
         self.repos.subjects.update(updated)
@@ -88,9 +103,7 @@ class AppService:
             for item in repo.all()
         )
         if related:
-            raise ValidationError(
-                "This subject is used by other records. Delete those records first."
-            )
+            raise ValidationError(tr("validation.subject_related"))
         self.repos.subjects.delete(subject_id)
 
     def create_task(
@@ -105,12 +118,12 @@ class AppService:
         self._require_subject(subject_id)
         task = Task(
             self.repos.tasks.create_id(),
-            required(title, "Title"),
+            required(title, tr("field.title")),
             description.strip(),
             int(subject_id),
-            iso_date(deadline, "Deadline"),
-            self._choice(priority, {"LOW", "MEDIUM", "HIGH"}, "Priority"),
-            integer_between(minutes, 1, 600, "Estimated time"),
+            iso_date(deadline, tr("field.deadline")),
+            self._choice(priority, {"LOW", "MEDIUM", "HIGH"}, tr("field.priority")),
+            integer_between(minutes, 1, 600, tr("label.estimated_time")),
             "TODO",
             now_iso(),
             "",
@@ -118,30 +131,39 @@ class AppService:
         return self.repos.tasks.add(task)
 
     def update_task(self, task_id: int, **values) -> Task:
-        task = self._require(self.repos.tasks.get(task_id), "Task")
+        task = self._require(self.repos.tasks.get(task_id), tr("entity.task"))
         subject_id = int(values.get("subject_id", task.subject_id))
         self._require_subject(subject_id)
         updated = replace(
             task,
-            title=required(values.get("title", task.title), "Title"),
+            title=required(values.get("title", task.title), tr("field.title")),
             description=values.get("description", task.description).strip(),
             subject_id=subject_id,
-            deadline=iso_date(values.get("deadline", task.deadline), "Deadline"),
+            deadline=iso_date(
+                values.get("deadline", task.deadline), tr("field.deadline")
+            ),
             priority=self._choice(
                 values.get("priority", task.priority),
                 {"LOW", "MEDIUM", "HIGH"},
-                "Priority",
+                tr("field.priority"),
             ),
             estimated_minutes=integer_between(
-                values.get("minutes", task.estimated_minutes), 1, 600, "Estimated time"
+                values.get("minutes", task.estimated_minutes),
+                1,
+                600,
+                tr("label.estimated_time"),
             ),
         )
         self.repos.tasks.update(updated)
         return updated
 
     def set_task_status(self, task_id: int, status: str) -> None:
-        task = self._require(self.repos.tasks.get(task_id), "Task")
-        status = self._choice(status, {"TODO", "IN_PROGRESS", "COMPLETED"}, "Status")
+        task = self._require(self.repos.tasks.get(task_id), tr("entity.task"))
+        status = self._choice(
+            status,
+            {"TODO", "IN_PROGRESS", "COMPLETED"},
+            tr("label.status"),
+        )
         self.repos.tasks.update(
             replace(
                 task,
@@ -154,9 +176,9 @@ class AppService:
         self._require_subject(subject_id)
         note = Note(
             self.repos.notes.create_id(),
-            required(title, "Title"),
+            required(title, tr("field.title")),
             int(subject_id),
-            required(content, "Content"),
+            required(content, tr("field.content")),
             now_iso(),
             now_iso(),
         )
@@ -165,13 +187,13 @@ class AppService:
     def update_note(
         self, note_id: int, title: str, subject_id: int, content: str
     ) -> Note:
-        old = self._require(self.repos.notes.get(note_id), "Note")
+        old = self._require(self.repos.notes.get(note_id), tr("entity.note"))
         self._require_subject(subject_id)
         note = replace(
             old,
-            title=required(title, "Title"),
+            title=required(title, tr("field.title")),
             subject_id=int(subject_id),
-            content=required(content, "Content"),
+            content=required(content, tr("field.content")),
             updated_at=now_iso(),
         )
         self.repos.notes.update(note)
@@ -184,8 +206,8 @@ class AppService:
         card = Flashcard(
             self.repos.flashcards.create_id(),
             int(subject_id),
-            required(question, "Question"),
-            required(answer, "Answer"),
+            required(question, tr("field.question")),
+            required(answer, tr("field.answer")),
             "NEW",
             0,
             0,
@@ -195,8 +217,12 @@ class AppService:
         return self.repos.flashcards.add(card)
 
     def review_flashcard(self, card_id: int, rating: str) -> None:
-        card = self._require(self.repos.flashcards.get(card_id), "Flashcard")
-        rating = self._choice(rating, {"AGAIN", "HARD", "GOOD", "EASY"}, "Rating")
+        card = self._require(self.repos.flashcards.get(card_id), tr("entity.flashcard"))
+        rating = self._choice(
+            rating,
+            {"AGAIN", "HARD", "GOOD", "EASY"},
+            tr("label.rating"),
+        )
         correct = card.correct_count + (rating in {"GOOD", "EASY"})
         wrong = card.wrong_count + (rating in {"AGAIN", "HARD"})
         self.repos.flashcards.update(
@@ -220,14 +246,14 @@ class AppService:
     ) -> StudySession:
         self._require_subject(subject_id)
         if task_id and not self.repos.tasks.get(task_id):
-            raise ValidationError("The selected task no longer exists.")
+            raise ValidationError(tr("validation.task_missing"))
         session = StudySession(
             self.repos.sessions.create_id(),
             int(subject_id),
             str(task_id),
             iso_date(session_date),
             start_time,
-            integer_between(planned, 1, 600, "Planned time"),
+            integer_between(planned, 1, 600, tr("label.planned_time")),
             0,
             note.strip(),
             "PLANNED",
@@ -236,11 +262,15 @@ class AppService:
         return self.repos.sessions.add(session)
 
     def complete_session(self, session_id: int, actual_minutes: int) -> None:
-        session = self._require(self.repos.sessions.get(session_id), "Study session")
+        session = self._require(
+            self.repos.sessions.get(session_id), tr("entity.study_session")
+        )
         self.repos.sessions.update(
             replace(
                 session,
-                actual_minutes=integer_between(actual_minutes, 1, 600, "Actual time"),
+                actual_minutes=integer_between(
+                    actual_minutes, 1, 600, tr("label.actual_time")
+                ),
                 status="COMPLETED",
             )
         )
@@ -253,9 +283,9 @@ class AppService:
         questions: list[dict[str, str]],
     ) -> Quiz:
         self._require_subject(subject_id)
-        required(title, "Quiz title")
+        required(title, tr("label.quiz_title"))
         if not questions:
-            raise ValidationError("Add at least one question.")
+            raise ValidationError(tr("validation.add_question"))
         for question in questions:
             for key in (
                 "question_text",
@@ -264,11 +294,11 @@ class AppService:
                 "option_c",
                 "option_d",
             ):
-                required(question.get(key, ""), key.replace("_", " ").title())
+                required(question.get(key, ""), tr("field.question"))
             self._choice(
                 question.get("correct_option", ""),
                 {"A", "B", "C", "D"},
-                "Correct option",
+                tr("label.correct_option"),
             )
         quiz = self.repos.quizzes.add(
             Quiz(
@@ -298,12 +328,12 @@ class AppService:
     def submit_quiz(
         self, quiz_id: int, answers: dict[int, str], duration_seconds: int = 0
     ) -> QuizResult:
-        self._require(self.repos.quizzes.get(quiz_id), "Quiz")
+        self._require(self.repos.quizzes.get(quiz_id), tr("entity.quiz"))
         questions = [
             item for item in self.repos.questions.all() if item.quiz_id == int(quiz_id)
         ]
         if not questions:
-            raise ValidationError("This quiz has no valid questions.")
+            raise ValidationError(tr("validation.quiz_no_questions"))
         score = sum(
             1
             for item in questions
@@ -333,19 +363,22 @@ class AppService:
         load_demo_data(self.repos)
 
     def reset(self) -> None:
+        language = self.repos.settings.get("language", DEFAULT_LANGUAGE)
         for name, fields in SCHEMAS.items():
             self.repos.data_dir.joinpath(f"{name}.csv").unlink(missing_ok=True)
         self.repos = RepositoryBundle(self.repos.data_dir)
+        self.repos.settings.set("language", language)
 
     def export(self, name: str) -> Path:
-        mapping = {
+        legacy_names = {
             "Tasks": "tasks",
             "Study History": "study_sessions",
             "Quiz Results": "quiz_results",
         }
-        source_name = mapping.get(name)
-        if not source_name:
-            raise ValidationError("Unknown export type.")
+        source_name = legacy_names.get(name, name)
+        valid_exports = {"tasks", "study_sessions", "quiz_results"}
+        if source_name not in valid_exports:
+            raise ValidationError(tr("validation.unknown_export"))
         rows = getattr(
             self.repos,
             {"study_sessions": "sessions", "quiz_results": "results"}.get(
@@ -364,17 +397,17 @@ class AppService:
         return destination
 
     def _require_subject(self, subject_id: int) -> Subject:
-        return self._require(self.repos.subjects.get(subject_id), "Subject")
+        return self._require(self.repos.subjects.get(subject_id), tr("entity.subject"))
 
     @staticmethod
     def _require(value, label: str):
         if value is None:
-            raise ValidationError(f"{label} was not found.")
+            raise ValidationError(tr("common.not_found", item=label))
         return value
 
     @staticmethod
     def _choice(value: str, choices: set[str], label: str) -> str:
         value = str(value).upper()
         if value not in choices:
-            raise ValidationError(f"{label} is invalid.")
+            raise ValidationError(tr("validation.invalid_choice", label=label))
         return value

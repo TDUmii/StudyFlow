@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
+from app.i18n import DEFAULT_LANGUAGE, language_manager, tr
 from app.services import AppService
 from app.ui.dialogs import OnboardingDialog
 from app.ui.main_window import MainWindow
@@ -33,19 +34,24 @@ def create_application() -> tuple[QApplication, MainWindow | None]:
         style_path = ROOT / "app" / "theme" / "style.qss"
         app.setStyleSheet(style_path.read_text(encoding="utf-8"))
         service = AppService(ROOT / "data", ROOT / "exports")
+        stored_language = service.repos.settings.get("language", DEFAULT_LANGUAGE)
+        language_manager.set_language(stored_language, emit=False)
         if not service.repos.profile.get_name():
             onboarding = OnboardingDialog()
             if onboarding.exec() != QDialog.Accepted:
                 return app, None
             service.setup_profile(*onboarding.values())
+            language_manager.set_language(onboarding.values()[2], emit=False)
+        elif not service.repos.settings.get("language"):
+            service.repos.settings.set("language", language_manager.current_language)
         window = MainWindow(service)
         return app, window
     except Exception as exc:
         logging.exception("Application startup failed")
         QMessageBox.critical(
             None,
-            "StudyFlow could not start",
-            f"StudyFlow could not prepare its local files.\n\n{exc}",
+            tr("startup.error_title"),
+            tr("startup.error_message", error=exc),
         )
         return app, None
 
