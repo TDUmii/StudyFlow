@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.services import AssistantService, StatisticsService
+from app.data.subject_catalog import subject_display_name, subject_search_text
 from app.i18n import SUPPORTED_LANGUAGES, language_manager, tr
 from app.ui.dialogs import (
     FlashcardDialog,
@@ -189,11 +190,19 @@ class SubjectsPage(Page):
         items = [
             s
             for s in self.service.repos.subjects.all()
-            if term in (s.name + " " + s.description).casefold()
+            if term in subject_search_text(s).casefold()
         ]
         fill_table(
             self.table,
-            [(s.id, s.name, f"{s.target_score}%", s.description) for s in items],
+            [
+                (
+                    s.id,
+                    subject_display_name(s),
+                    f"{s.target_score}%",
+                    s.description,
+                )
+                for s in items
+            ],
         )
 
     def add(self):
@@ -216,7 +225,7 @@ class SubjectsPage(Page):
         if item and confirm(
             self,
             tr("subjects.delete_title"),
-            tr("subjects.delete_message", name=item.name),
+            tr("subjects.delete_message", name=subject_display_name(item)),
         ):
             self.guard(lambda: self.service.delete_subject(item.id))
             self.changed.emit()
@@ -260,7 +269,9 @@ class TasksPage(Page):
         self.root.addWidget(self.table)
 
     def refresh(self):
-        names = {s.id: s.name for s in self.service.repos.subjects.all()}
+        names = {
+            s.id: subject_display_name(s) for s in self.service.repos.subjects.all()
+        }
         term = self.search.text().casefold()
         status = self.filter.currentData()
         items = [
@@ -355,7 +366,9 @@ class NotesPage(Page):
         self.root.addWidget(self.table)
 
     def refresh(self):
-        names = {s.id: s.name for s in self.service.repos.subjects.all()}
+        names = {
+            s.id: subject_display_name(s) for s in self.service.repos.subjects.all()
+        }
         term = self.search.text().casefold()
         items = [
             n
@@ -435,7 +448,9 @@ class PlannerPage(Page):
         self.timer.timeout.connect(self.tick)
 
     def refresh(self):
-        names = {s.id: s.name for s in self.service.repos.subjects.all()}
+        names = {
+            s.id: subject_display_name(s) for s in self.service.repos.subjects.all()
+        }
         items = sorted(
             self.service.repos.sessions.all(),
             key=lambda s: (s.date, s.start_time),
@@ -534,7 +549,9 @@ class FlashcardsPage(Page):
         self.root.addWidget(self.table)
 
     def refresh(self):
-        names = {s.id: s.name for s in self.service.repos.subjects.all()}
+        names = {
+            s.id: subject_display_name(s) for s in self.service.repos.subjects.all()
+        }
         items = sorted(
             self.service.repos.flashcards.all(),
             key=lambda c: -(c.wrong_count * 3 - c.correct_count),
@@ -626,7 +643,9 @@ class QuizPage(Page):
         self.root.addWidget(self.table)
 
     def refresh(self):
-        names = {s.id: s.name for s in self.service.repos.subjects.all()}
+        names = {
+            s.id: subject_display_name(s) for s in self.service.repos.subjects.all()
+        }
         questions = self.service.repos.questions.all()
         results = self.service.repos.results.all()
         rows = []

@@ -42,6 +42,8 @@ class Subject(RecordMixin):
     description: str = ""
     target_score: int = 80
     created_at: str = ""
+    catalog_key: str = ""
+    name_vi: str = ""
 
 
 @dataclass

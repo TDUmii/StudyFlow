@@ -2,7 +2,16 @@
 
 SCHEMAS = {
     "profile": ["name", "created_at"],
-    "subjects": ["id", "name", "color", "description", "target_score", "created_at"],
+    "subjects": [
+        "id",
+        "name",
+        "color",
+        "description",
+        "target_score",
+        "created_at",
+        "catalog_key",
+        "name_vi",
+    ],
     "tasks": [
         "id",
         "title",

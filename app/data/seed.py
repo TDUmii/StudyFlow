@@ -34,14 +34,14 @@ def load_demo_data(repos) -> None:
     repos.settings.set("theme", "light")
     repos.settings.set("minimum_study_day", "10")
     subjects = [
-        (1, "Mathematics", "#6366F1", 80),
-        (2, "Python", "#22C55E", 90),
-        (3, "English", "#F59E0B", 85),
-        (4, "Physics", "#EF4444", 80),
+        (1, "Mathematics", "mathematics", "#6366F1", 80),
+        (2, "Python", "python", "#22C55E", 90),
+        (3, "English", "english", "#F59E0B", 85),
+        (4, "Physics", "physics", "#EF4444", 80),
     ]
-    for i, name, color, target in subjects:
+    for i, name, catalog_key, color, target in subjects:
         repos.subjects.add(
-            Subject(i, name, color, f"{name} learning goals", target, now)
+            Subject(i, name, color, f"{name} learning goals", target, now, catalog_key)
         )
     task_titles = [
         "Algebra worksheet",

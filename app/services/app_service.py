@@ -6,6 +6,11 @@ from datetime import date, datetime
 from pathlib import Path
 
 from app.data.seed import load_demo_data
+from app.data.subject_catalog import (
+    CATALOG_BY_KEY,
+    catalog_name_for_language,
+    subject_catalog_key,
+)
 from app.i18n import DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, tr
 from app.models import (
     Flashcard,
@@ -50,15 +55,31 @@ class AppService:
 
     def create_subject(
         self,
-        name: str,
+        name: str = "",
         color: str = "#6366F1",
         description: str = "",
         target_score: int = 80,
+        catalog_key: str = "",
+        name_vi: str = "",
     ) -> Subject:
-        name = required(name, tr("label.subject_name"))
+        catalog_key = str(catalog_key).strip()
+        if catalog_key:
+            if catalog_key not in CATALOG_BY_KEY:
+                raise ValidationError(tr("validation.invalid_subject_catalog"))
+            name = catalog_name_for_language(catalog_key, "en")
+            name_vi = catalog_name_for_language(catalog_key, "vi")
+            color = CATALOG_BY_KEY[catalog_key].color
+        else:
+            name = required(name, tr("subjects.name_en"))
+            # Keep the public service backward-compatible for imports and old tests.
+            # The GUI asks for both names when students create a custom subject.
+            name_vi = str(name_vi).strip() or name
+        existing = self.repos.subjects.all()
         if any(
-            item.name.casefold() == name.casefold()
-            for item in self.repos.subjects.all()
+            (catalog_key and subject_catalog_key(item) == catalog_key)
+            or item.name.casefold() == name.casefold()
+            or (name_vi and item.name_vi.casefold() == name_vi.casefold())
+            for item in existing
         ):
             raise ValidationError(tr("validation.subject_exists"))
         subject = Subject(
@@ -68,6 +89,8 @@ class AppService:
             description.strip(),
             integer_between(target_score, 1, 100, tr("label.target_score")),
             now_iso(),
+            catalog_key,
+            name_vi.strip(),
         )
         return self.repos.subjects.add(subject)
 
@@ -75,10 +98,35 @@ class AppService:
         subject = self._require(
             self.repos.subjects.get(subject_id), tr("entity.subject")
         )
+        catalog_key = str(values.get("catalog_key", subject.catalog_key)).strip()
+        if catalog_key:
+            if catalog_key not in CATALOG_BY_KEY:
+                raise ValidationError(tr("validation.invalid_subject_catalog"))
+            name = catalog_name_for_language(catalog_key, "en")
+            name_vi = catalog_name_for_language(catalog_key, "vi")
+            color = CATALOG_BY_KEY[catalog_key].color
+        else:
+            name = required(values.get("name", subject.name), tr("subjects.name_en"))
+            name_vi = required(
+                values.get("name_vi", subject.name_vi), tr("subjects.name_vi")
+            )
+            color = values.get("color", subject.color)
+        if any(
+            item.id != subject.id
+            and (
+                (catalog_key and subject_catalog_key(item) == catalog_key)
+                or item.name.casefold() == name.casefold()
+                or (name_vi and item.name_vi.casefold() == name_vi.casefold())
+            )
+            for item in self.repos.subjects.all()
+        ):
+            raise ValidationError(tr("validation.subject_exists"))
         updated = replace(
             subject,
-            name=required(values.get("name", subject.name), tr("label.subject_name")),
-            color=values.get("color", subject.color),
+            name=name,
+            name_vi=name_vi.strip(),
+            catalog_key=catalog_key,
+            color=color,
             description=values.get("description", subject.description).strip(),
             target_score=integer_between(
                 values.get("target_score", subject.target_score),

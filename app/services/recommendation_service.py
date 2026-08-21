@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 from app.repositories import RepositoryBundle
 from app.i18n import tr
+from app.data.subject_catalog import subject_display_name
 
 
 class RecommendationService:
@@ -74,7 +75,7 @@ class RecommendationService:
             (
                 {
                     "subject_id": subject.id,
-                    "subject": subject.name,
+                    "subject": subject_display_name(subject),
                     "score": min(scores.get(subject.id, 0), 100),
                     "reasons": list(dict.fromkeys(reasons[subject.id]))[:4],
                 }

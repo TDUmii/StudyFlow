@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 from app.repositories import RepositoryBundle
 from app.i18n import tr
+from app.data.subject_catalog import subject_display_name
 
 
 class StatisticsService:
@@ -31,7 +32,7 @@ class StatisticsService:
             if session.status == "COMPLETED":
                 by_subject[session.subject_id] += session.actual_minutes
                 by_day[session.date] += session.actual_minutes
-        subjects = {s.id: s.name for s in self.repos.subjects.all()}
+        subjects = {s.id: subject_display_name(s) for s in self.repos.subjects.all()}
         most_id = max(by_subject, key=by_subject.get) if by_subject else None
         return {
             "tasks_today": sum(

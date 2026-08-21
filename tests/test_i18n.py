@@ -81,4 +81,6 @@ def test_smart_assistant_uses_active_language(service):
     message = AssistantService(service.repos).message()
     assert "Điểm ưu tiên" in message
     assert "Gợi ý" in message
+    assert "Toán học" in message
+    assert "Mathematics" not in message
     language_manager.set_language("en", emit=False)

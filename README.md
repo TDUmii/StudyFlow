@@ -6,7 +6,7 @@ StudyFlow is an offline personal study assistant for students and a capstone pro
 
 - First-launch onboarding for the student's name and default study duration.
 - Dashboard with live task, study-time, deadline, streak, and recommendation data.
-- Subject create, edit, delete, and case-insensitive search with relationship protection.
+- Localized subject library with common school subjects, bilingual custom-subject creation, edit/delete, bilingual search, and relationship protection.
 - Task create, edit, start, complete, delete, search, status filter, deadline sorting, priorities, and validation.
 - Planner with linked tasks, planned/actual time, session completion, and a live study timer.
 - Plain-text notes that safely preserve UTF-8 Vietnamese, commas, quotation marks, and new lines.
@@ -106,7 +106,7 @@ tasks.csv → DictReader → dictionaries → Task.from_dict() → service → U
 | File | Fields |
 |---|---|
 | `profile.csv` | name, created_at |
-| `subjects.csv` | id, name, color, description, target_score, created_at |
+| `subjects.csv` | id, name, color, description, target_score, created_at, catalog_key, name_vi |
 | `tasks.csv` | id, title, description, subject_id, deadline, priority, estimated_minutes, status, created_at, completed_at |
 | `study_sessions.csv` | id, subject_id, task_id, date, start_time, planned_minutes, actual_minutes, note, status, created_at |
 | `notes.csv` | id, title, subject_id, content, created_at, updated_at |
@@ -121,6 +121,8 @@ The active UI language is stored as the `language` key in `settings.csv` (`en` o
 ## Languages and Localization
 
 StudyFlow supports English and Vietnamese. Open **Settings → Language** and select `English` or `Tiếng Việt`; the window, navigation, pages, tables, dialogs, validation messages, charts, status labels, and Smart Assistant update immediately without restarting. The selection remains active after the application restarts.
+
+Subject names follow the active language everywhere, including selectors, tables, charts, statistics, recommendations, and study plans. `app/data/subject_catalog.py` contains stable subject keys for common school subjects. A catalog subject therefore keeps the same identity while displaying, for example, `Mathematics` in English and `Toán học` in Vietnamese. Students can select **Other / Custom subject** and enter separate English and Vietnamese names for a subject that is not yet in the library. Older CSV files are migrated safely with empty new columns, and legacy names such as `Mathematics` or `Physics` are recognized automatically.
 
 Localization is intentionally separated from UI and business logic:
 

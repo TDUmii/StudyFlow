@@ -16,6 +16,12 @@ from PySide6.QtWidgets import (
 )
 
 from app.i18n import SUPPORTED_LANGUAGES, language_manager, tr
+from app.data.subject_catalog import (
+    CATALOG_BY_KEY,
+    catalog_options,
+    infer_catalog_key,
+    subject_display_name,
+)
 from app.utils.validators import ValidationError
 
 
@@ -50,7 +56,7 @@ class FormDialog(QDialog):
 def subject_combo(subjects, selected=None):
     combo = QComboBox()
     for subject in subjects:
-        combo.addItem(subject.name, subject.id)
+        combo.addItem(subject_display_name(subject), subject.id)
     if selected is not None:
         index = combo.findData(int(selected))
         combo.setCurrentIndex(max(0, index))
@@ -101,7 +107,16 @@ class SubjectDialog(FormDialog):
         super().__init__(
             tr("dialog.edit_subject") if subject else tr("dialog.add_subject"), parent
         )
-        self.name = QLineEdit(subject.name if subject else "")
+        current_key = (
+            (subject.catalog_key or infer_catalog_key(subject.name)) if subject else ""
+        )
+        self.catalog = QComboBox()
+        self.catalog.addItem(tr("subjects.custom_subject"), "")
+        for key, label, _color in catalog_options():
+            self.catalog.addItem(label, key)
+        self.catalog.setCurrentIndex(max(0, self.catalog.findData(current_key)))
+        self.name = QLineEdit(subject.name if subject and not current_key else "")
+        self.name_vi = QLineEdit(subject.name_vi if subject and not current_key else "")
         self.color = QLineEdit(subject.color if subject else "#6366F1")
         self.description = QTextEdit(subject.description if subject else "")
         self.description.setMaximumHeight(90)
@@ -109,20 +124,34 @@ class SubjectDialog(FormDialog):
         self.target.setRange(1, 100)
         self.target.setValue(subject.target_score if subject else 80)
         self.target.setSuffix("%")
-        self.form.addRow(tr("field.name"), self.name)
+        self.form.addRow(tr("subjects.library"), self.catalog)
+        self.form.addRow(tr("subjects.name_en"), self.name)
+        self.form.addRow(tr("subjects.name_vi"), self.name_vi)
         self.form.addRow(tr("field.color_hex"), self.color)
         self.form.addRow(tr("field.description"), self.description)
         self.form.addRow(tr("field.target_score"), self.target)
+        self.catalog.currentIndexChanged.connect(self._catalog_changed)
+        self._catalog_changed()
+
+    def _catalog_changed(self):
+        is_custom = not bool(self.catalog.currentData())
+        self.name.setEnabled(is_custom)
+        self.name_vi.setEnabled(is_custom)
+        if not is_custom:
+            definition = CATALOG_BY_KEY[self.catalog.currentData()]
+            self.color.setText(definition.color)
 
     def validate(self):
-        if not self.name.text().strip():
-            raise ValidationError(
-                tr("validation.required", label=tr("label.subject_name"))
-            )
+        if not self.catalog.currentData() and (
+            not self.name.text().strip() or not self.name_vi.text().strip()
+        ):
+            raise ValidationError(tr("subjects.custom_names_required"))
 
     def values(self):
         return {
             "name": self.name.text(),
+            "name_vi": self.name_vi.text(),
+            "catalog_key": self.catalog.currentData(),
             "color": self.color.text(),
             "description": self.description.toPlainText(),
             "target_score": self.target.value(),

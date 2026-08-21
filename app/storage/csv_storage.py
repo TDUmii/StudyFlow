@@ -26,8 +26,19 @@ class CSVStorage:
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
             if not self.file_path.exists() or self.file_path.stat().st_size == 0:
                 self._write_file(self.file_path, [])
+            else:
+                self._migrate_header_if_needed()
         except OSError as exc:
             raise StorageError(f"Could not prepare {self.file_path.name}.") from exc
+
+    def _migrate_header_if_needed(self) -> None:
+        """Add newly introduced columns without losing older CSV data."""
+        with self.file_path.open("r", encoding="utf-8-sig", newline="") as file:
+            reader = csv.DictReader(file)
+            if reader.fieldnames == self.fieldnames:
+                return
+            old_rows = [row for row in reader if row and None not in row]
+        self._write_file(self.file_path, old_rows)
 
     def read_all(self) -> list[dict[str, str]]:
         self.ensure_file()
