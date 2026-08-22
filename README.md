@@ -26,6 +26,24 @@ The screenshot below is rendered from the real application with runtime-generate
 |---|---|
 | ![StudyFlow English dashboard](assets/screenshots/dashboard.png) | ![StudyFlow Vietnamese dashboard](assets/screenshots/dashboard-vi.png) |
 
+## Beginner Teaching Edition
+
+Students should begin with **StudyFlow Simple** under `teaching/`, not with the full architecture under `app/`. The teaching edition keeps real PySide6 UI, bilingual subjects, CRUD, validation, CSV persistence, relationships, and deterministic recommendations while reducing the Python source to four focused files.
+
+Run it with:
+
+```powershell
+python -m teaching.main
+```
+
+Windows users can also double-click `run_teaching.bat`.
+
+- [Teaching edition guide](teaching/README.md)
+- [17-week Vietnamese curriculum](GIAO_TRINH_STUDYFLOW_SIMPLE.md)
+- Full `app/` edition remains available as the advanced architecture reference.
+
+![StudyFlow Simple Vietnamese dashboard](assets/screenshots/teaching-simple-vi.png)
+
 ## Tech Stack
 
 - Python 3.11+
@@ -41,6 +59,9 @@ StudyFlow/
 ├── main.py
 ├── requirements.txt
 ├── README.md
+├── run_teaching.bat     # double-click launcher for the teaching edition
+├── GIAO_TRINH_STUDYFLOW_SIMPLE.md
+├── teaching/            # four-file beginner edition with its own runtime CSV folder
 ├── app/
 │   ├── data/             # deterministic demo-data generator
 │   ├── i18n/             # language registry, translator, English and Vietnamese files

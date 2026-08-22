@@ -14,5 +14,7 @@ exports/*
 !exports/.gitkeep
 data/*.csv
 !data/.gitkeep
+teaching/data/*.csv
+!teaching/data/.gitkeep
 .DS_Store
 Thumbs.db
